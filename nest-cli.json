@@ -1,0 +1,48 @@
+{
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/orders/src",
+  "compilerOptions": {
+    "webpack": true,
+    "tsConfigPath": "apps/orders/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/orders",
+  "projects": {
+    "orders": {
+      "type": "application",
+      "root": "apps/orders",
+      "entryFile": "main",
+      "sourceRoot": "apps/orders/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/orders/tsconfig.app.json"
+      }
+    },
+    "payments": {
+      "type": "application",
+      "root": "apps/payments",
+      "entryFile": "main",
+      "sourceRoot": "apps/payments/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/payments/tsconfig.app.json"
+      }
+    },
+    "notifications": {
+      "type": "application",
+      "root": "apps/notifications",
+      "entryFile": "main",
+      "sourceRoot": "apps/notifications/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/notifications/tsconfig.app.json"
+      }
+    },
+    "shared": {
+      "type": "library",
+      "root": "libs/shared",
+      "entryFile": "index",
+      "sourceRoot": "libs/shared/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/shared/tsconfig.lib.json"
+      }
+    }
+  }
+}
