@@ -16,3 +16,4 @@ export const ROUTING_KEYS = {
 // Injection tokens
 export const PAYMENT_CLIENT = 'PAYMENT_CLIENT';
 export const NOTIFICATION_CLIENT = 'NOTIFICATION_CLIENT';
+export const ORDER_CLIENT = 'ORDER_CLIENT';
