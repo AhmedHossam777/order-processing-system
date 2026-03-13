@@ -3,7 +3,7 @@ export const RABBITMQ_URL = 'amqp://admin:password@localhost:5672';
 // Queues names
 export const ORDER_QUEUE = 'order_event_queue';
 export const PAYMENT_QUEUE = 'payment_event_queue';
-export const NOTIFICATION = 'notifaction_event_queue';
+export const NOTIFICATION_QUEUE = 'notifaction_event_queue';
 
 // Routing keys
 export const ROUTING_KEYS = {
