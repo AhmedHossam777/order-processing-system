@@ -60,8 +60,21 @@ services:
     volumes:
       - notifications_db_data:/var/lib/postgresql/data
 
+  inventory-db:
+    image: postgres:16-alpine
+    container_name: inventory-db
+    ports:
+      - '5436:5432'
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_pass
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
+
 volumes:
   rabbitmq_data:
   orders_db_data:
   payments_db_data:
   notifications_db_data:
+  inventory_db_data:
