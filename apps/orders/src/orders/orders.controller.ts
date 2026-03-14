@@ -8,7 +8,7 @@ import {
   ROUTING_KEYS,
 } from '@app/shared';
 
-@Controller()
+@Controller('orders')
 export class OrdersController {
   private readonly logger = new Logger(OrdersController.name);
 
