@@ -4,10 +4,12 @@ import { Payment } from './entities/payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import {
+  InventoryFailedEvent,
   NOTIFICATION_CLIENT,
   ORDER_CLIENT,
   OrderCreatedEvent,
   PaymentFailedEvent,
+  PaymentRefundedEvent,
   PaymentSuccessEvent,
   ROUTING_KEYS,
 } from '@app/shared';
@@ -81,6 +83,33 @@ export class PaymentsService {
       this.orderClient.emit(ROUTING_KEYS.PAYMENT_FAILED, failedEvent);
       this.notificationClient.emit(ROUTING_KEYS.PAYMENT_FAILED, failedEvent);
     }
+  }
+
+  async refundPayment(event: InventoryFailedEvent): Promise<void> {
+    const payment = await this.paymentRepository.findOne({
+      where: { orderId: event.orderId, status: 'SUCCESS' },
+    });
+
+    if (!payment) {
+      this.logger.error(
+        `Could not find successful payment for order ${event.orderId}`,
+      );
+      return;
+    }
+
+    payment.status = 'REFUNDED';
+    payment.failureReason = event.reason;
+    await this.paymentRepository.save(payment);
+    this.logger.log(`Payment REFUNDED for order: ${event.orderId}`);
+
+    const refundEvent = new PaymentRefundedEvent(
+      payment.orderId,
+      payment.amount,
+      event.reason,
+    );
+
+    this.orderClient.emit(ROUTING_KEYS.PAYMENT_REFUNDED, refundEvent);
+    this.notificationClient.emit(ROUTING_KEYS.PAYMENT_REFUNDED, refundEvent);
   }
 
   private async simulatePaymentProcessing(): Promise<void> {
