@@ -2,12 +2,14 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('payments')
-export class Order {
+@Entity('order_views')
+@Index('idx_order_view_status_updated_at', ['status', 'updatedAt'])
+export class OrderViewEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -23,8 +25,12 @@ export class Order {
   @Column()
   userId: string;
 
-  @Column({ default: 'PENDING' })
-  status: string;
+  @Column({ type: 'varchar', length: 30 })
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+
+  
+  @Column({ type: 'int' , default: 0})
+  lastEventSequence: number;
 
   @CreateDateColumn()
   createdAt: Date;

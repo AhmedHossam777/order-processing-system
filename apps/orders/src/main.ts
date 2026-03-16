@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ORDER_QUEUE, RABBITMQ_URL } from '@app/shared';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger();
@@ -17,6 +17,14 @@ async function bootstrap() {
       noAck: false,
     },
   });
+
+  app.useGlobalPipes(
+  new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }),
+);
 
   await app.startAllMicroservices();
   await app.listen(process.env.port ?? 3000);
