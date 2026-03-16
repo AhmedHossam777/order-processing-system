@@ -5,6 +5,8 @@ import { Payment } from './entities/payment.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import {
+  INVENTORY_CLIENT,
+  INVENTORY_QUEUE,
   NOTIFICATION_CLIENT,
   NOTIFICATION_QUEUE,
   ORDER_CLIENT,
@@ -31,6 +33,15 @@ import {
         options: {
           urls: [RABBITMQ_URL],
           queue: ORDER_QUEUE,
+          queueOptions: { durable: true },
+        },
+      },
+      {
+        name: INVENTORY_CLIENT,
+        transport: Transport.RMQ,
+        options: {
+          urls: [RABBITMQ_URL],
+          queue: INVENTORY_QUEUE,
           queueOptions: { durable: true },
         },
       },

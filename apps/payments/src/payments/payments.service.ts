@@ -1,10 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   InventoryFailedEvent,
+  INVENTORY_CLIENT,
   NOTIFICATION_CLIENT,
   ORDER_CLIENT,
   OrderCreatedEvent,
@@ -27,10 +28,22 @@ export class PaymentsService {
 
     @Inject(ORDER_CLIENT)
     private readonly orderClient: ClientProxy,
+
+    @Inject(INVENTORY_CLIENT)
+    private readonly inventoryClient: ClientProxy,
   ) {}
 
   async processOrderPayment(event: OrderCreatedEvent): Promise<void> {
     this.logger.log(`Processing payment for order: ${event.orderId}`);
+
+    // Idempotency: if we already processed this order, skip (same event delivered twice)
+    const existing = await this.paymentRepository.findOne({
+      where: { orderId: event.orderId },
+    });
+    if (existing) {
+      this.logger.log(`Payment for order ${event.orderId} already processed (${existing.status}), skipping`);
+      return;
+    }
 
     const totalPrice = event.quantity * event.price;
 
@@ -60,6 +73,7 @@ export class PaymentsService {
 
       this.orderClient.emit(ROUTING_KEYS.PAYMENT_SUCCESS, successEvent);
       this.notificationClient.emit(ROUTING_KEYS.PAYMENT_SUCCESS, successEvent);
+      this.inventoryClient.emit(ROUTING_KEYS.PAYMENT_SUCCESS, successEvent);
     } else {
       const reason = 'Insufficient funds';
       const payment = this.paymentRepository.create({
@@ -87,14 +101,28 @@ export class PaymentsService {
 
   async refundPayment(event: InventoryFailedEvent): Promise<void> {
     const payment = await this.paymentRepository.findOne({
-      where: { orderId: event.orderId, status: 'SUCCESS' },
+      where: { orderId: event.orderId },
     });
 
     if (!payment) {
       this.logger.error(
-        `Could not find successful payment for order ${event.orderId}`,
+        `Could not find payment for order ${event.orderId}`,
       );
+      throw new BadRequestException(
+        `Could not find successful payment for order ${event.orderId}`
+      );
+    }
+
+    // Idempotency: already refunded (e.g. same INVENTORY_FAILED delivered twice)
+    if (payment.status === 'REFUNDED') {
+      this.logger.log(`Order ${event.orderId} already refunded, skipping`);
       return;
+    }
+
+    if (payment.status !== 'SUCCESS') {
+      throw new BadRequestException(
+        `Order ${event.orderId} payment is ${payment.status}, cannot refund`
+      );
     }
 
     payment.status = 'REFUNDED';

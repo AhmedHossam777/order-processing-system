@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import {
   InventoryFailedEvent,
   InventoryReservedEvent,
+  NOTIFICATION_CLIENT,
   ORDER_CLIENT,
   PAYMENT_CLIENT,
   PaymentSuccessEvent,
@@ -22,10 +23,23 @@ export class InventoryService {
 
     @Inject(ORDER_CLIENT) private readonly orderClient: ClientProxy,
     @Inject(PAYMENT_CLIENT) private readonly paymentClient: ClientProxy,
+    @Inject(NOTIFICATION_CLIENT)
+    private readonly notificationClient: ClientProxy,
   ) {}
 
   async reserveStock(event: PaymentSuccessEvent) {
     this.logger.log(`Attempting to reserve stock for order: ${event.orderId}`);
+
+    const existing = await this.reservationRepository.findOne({
+      where: { orderId: event.orderId },
+    });
+    if (existing) {
+      this.logger.log(
+        `Reservation for order ${event.orderId} already exists (${existing.status}), skipping`,
+      );
+      return;
+    }
+
     const inStock = Math.random() > 0.3;
 
     if (inStock) {
@@ -37,6 +51,10 @@ export class InventoryService {
       await this.reservationRepository.save(reservation);
 
       this.orderClient.emit(
+        ROUTING_KEYS.INVENTORY_RESERVED,
+        new InventoryReservedEvent(event.orderId),
+      );
+      this.notificationClient.emit(
         ROUTING_KEYS.INVENTORY_RESERVED,
         new InventoryReservedEvent(event.orderId),
       );
@@ -54,6 +72,10 @@ export class InventoryService {
       );
 
       this.paymentClient.emit(
+        ROUTING_KEYS.INVENTORY_FAILED,
+        new InventoryFailedEvent(event.orderId, 'Unknown Product', reason),
+      );
+      this.notificationClient.emit(
         ROUTING_KEYS.INVENTORY_FAILED,
         new InventoryFailedEvent(event.orderId, 'Unknown Product', reason),
       );
