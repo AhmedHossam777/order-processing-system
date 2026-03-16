@@ -9,6 +9,8 @@ import {
   PAYMENT_QUEUE,
   ORDER_CLIENT,
   PAYMENT_CLIENT,
+  NOTIFICATION_CLIENT,
+  NOTIFICATION_QUEUE,
 } from '@app/shared';
 import { Reservation } from './entities/reservations.entity';
 
@@ -31,6 +33,15 @@ import { Reservation } from './entities/reservations.entity';
         options: {
           urls: [RABBITMQ_URL],
           queue: PAYMENT_QUEUE,
+          queueOptions: { durable: true },
+        },
+      },
+      {
+        name: NOTIFICATION_CLIENT,
+        transport: Transport.RMQ,
+        options: {
+          urls: [RABBITMQ_URL],
+          queue: NOTIFICATION_QUEUE,
           queueOptions: { durable: true },
         },
       },

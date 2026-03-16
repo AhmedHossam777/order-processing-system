@@ -113,7 +113,6 @@ export class PaymentsService {
       );
     }
 
-    // Idempotency: already refunded (e.g. same INVENTORY_FAILED delivered twice)
     if (payment.status === 'REFUNDED') {
       this.logger.log(`Order ${event.orderId} already refunded, skipping`);
       return;
