@@ -1,32 +1,23 @@
 import { Module } from '@nestjs/common';
-import { PaymentsController } from './payments.controller';
-import { PaymentsService } from './payments.service';
-import { Payment } from './entities/payment.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { InventoryController } from './inventory.controller';
+import { InventoryService } from './inventory.service';
 import {
-  INVENTORY_CLIENT,
-  INVENTORY_QUEUE,
+  RABBITMQ_URL,
+  ORDER_QUEUE,
+  PAYMENT_QUEUE,
+  ORDER_CLIENT,
+  PAYMENT_CLIENT,
   NOTIFICATION_CLIENT,
   NOTIFICATION_QUEUE,
-  ORDER_CLIENT,
-  ORDER_QUEUE,
-  RABBITMQ_URL,
 } from '@app/shared';
+import { Reservation } from './entities/reservations.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment]),
+    TypeOrmModule.forFeature([Reservation]),
     ClientsModule.register([
-      {
-        name: NOTIFICATION_CLIENT,
-        transport: Transport.RMQ,
-        options: {
-          urls: [RABBITMQ_URL],
-          queue: NOTIFICATION_QUEUE,
-          queueOptions: { durable: true },
-        },
-      },
       {
         name: ORDER_CLIENT,
         transport: Transport.RMQ,
@@ -37,17 +28,26 @@ import {
         },
       },
       {
-        name: INVENTORY_CLIENT,
+        name: PAYMENT_CLIENT,
         transport: Transport.RMQ,
         options: {
           urls: [RABBITMQ_URL],
-          queue: INVENTORY_QUEUE,
+          queue: PAYMENT_QUEUE,
+          queueOptions: { durable: true },
+        },
+      },
+      {
+        name: NOTIFICATION_CLIENT,
+        transport: Transport.RMQ,
+        options: {
+          urls: [RABBITMQ_URL],
+          queue: NOTIFICATION_QUEUE,
           queueOptions: { durable: true },
         },
       },
     ]),
   ],
-  controllers: [PaymentsController],
-  providers: [PaymentsService],
+  controllers: [InventoryController],
+  providers: [InventoryService],
 })
-export class PaymentsModule {}
+export class InventoryModule {}

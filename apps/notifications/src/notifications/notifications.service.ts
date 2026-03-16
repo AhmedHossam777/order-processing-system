@@ -3,8 +3,11 @@ import { Notification } from './entities/notification.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  InventoryFailedEvent,
+  InventoryReservedEvent,
   OrderCreatedEvent,
   PaymentFailedEvent,
+  PaymentRefundedEvent,
   PaymentSuccessEvent,
 } from '@app/shared';
 
@@ -54,6 +57,33 @@ export class NotificationsService {
       body,
       event.orderId,
     );
+  }
+
+  async handleInventoryReserved(event: InventoryReservedEvent): Promise<void> {
+    const subject = 'Order Confirmed & Preparing to Ship!';
+    const body = `Great news! Your order ${event.orderId} has been confirmed. The items are in stock and we are preparing them for shipment.`;
+
+    this.logger.log(`📧 [ORDER_COMPLETED] Order ${event.orderId}`);
+    this.logger.log(`   Subject: ${subject}`);
+    this.logger.log(`   Body: ${body}`);
+  }
+
+  async handlePaymentRefunded(event: PaymentRefundedEvent): Promise<void> {
+    const subject = 'Order Cancelled & Payment Refunded';
+    const body = `We're sorry, but your order ${event.orderId} was cancelled because: ${event.reason}. A refund of $${event.amount} has been issued to your original payment method.`;
+
+    this.logger.warn(`📧 [PAYMENT_REFUNDED] Order ${event.orderId}`);
+    this.logger.warn(`   Subject: ${subject}`);
+    this.logger.warn(`   Body: ${body}`);
+  }
+
+  async handleInventoryFailed(event: InventoryFailedEvent): Promise<void> {
+    const subject = 'Order Cancelled — Out of Stock';
+    const body = `We're sorry, but your order ${event.orderId} was cancelled because: ${event.reason}. A refund has been issued to your original payment method.`;
+
+    this.logger.warn(`📧 [INVENTORY_FAILED] Order ${event.orderId}`);
+    this.logger.warn(`   Subject: ${subject}`);
+    this.logger.warn(`   Body: ${body}`);
   }
 
   private async saveAndSendNotification(
