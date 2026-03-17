@@ -4,5 +4,7 @@ export * from './events/payment-failed.event';
 export * from './events/payment-refunded.event';
 export * from './events/inventory-failed.event';
 export * from './events/inventory-reserved.event';
+export * from './events/order-completed.event';
+export * from './events/order-cancelled.event';
 
 export * from './rabbitmq/rabbitmq.constants';
