@@ -2,6 +2,7 @@ export const ORDER_DOMAIN_EVENT_TYPES = {
   ORDER_CREATED: 'ORDER_CREATED',
   ORDER_COMPLETED: 'ORDER_COMPLETED',
   ORDER_CANCELLED: 'ORDER_CANCELLED',
+  ORDER_FAILED: 'ORDER_FAILED',
 } as const;
 
 export type OrderDomainEventType =
@@ -20,6 +21,11 @@ export interface OrderCompletedDomainEventPayload {
 }
 
 export interface OrderCancelledDomainEventPayload {
+  orderId: string;
+  reason: string;
+}
+
+export interface OrderFailedDomainEventPayload {
   orderId: string;
   reason: string;
 }

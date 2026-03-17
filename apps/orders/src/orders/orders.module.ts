@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { OrdersController } from './orders.controller';
-import { OrdersService } from './services/orders.service';
+import { OrdersService } from './orders.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import {
@@ -12,6 +12,9 @@ import {
 } from '@app/shared';
 import { OrderEventEntity } from './entities/order-event.entity';
 import { OrderViewEntity } from './entities/order-view.entity';
+import { OrderProjectionService } from './services/order-projection.service';
+import { OrderEventStoreService } from './services/order-event-store.service';
+import { OrdersAdminController } from './order-admin.controller';
 
 @Module({
   imports: [
@@ -39,7 +42,7 @@ import { OrderViewEntity } from './entities/order-view.entity';
       },
     ]),
   ],
-  controllers: [OrdersController],
-  providers: [OrdersService],
+  controllers: [OrdersController, OrdersAdminController],
+  providers: [OrdersService, OrderEventStoreService, OrderProjectionService],
 })
 export class OrdersModule {}

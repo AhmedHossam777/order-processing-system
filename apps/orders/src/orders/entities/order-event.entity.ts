@@ -6,10 +6,10 @@ export class OrderEventEntity {
   id: string;
 
   @Column()
-  aggregateId: string; // orderId
+  aggregateId: string; 
 
   @Column()
-  type: string; // ORDER_CREATED | ORDER_COMPLETED | ORDER_CANCELLED
+  type: string; 
 
   @Column({ type: 'jsonb' })
   payload: Record<string, any>;

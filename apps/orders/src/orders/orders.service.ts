@@ -9,62 +9,75 @@ import {
 } from '@app/shared';
 import { ClientProxy } from '@nestjs/microservices';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Order } from './entities/order.entity';
+import { OrderEventStoreService } from './services/order-event-store.service';
+import { OrderProjectionService } from './services/order-projection.service';
+import { ORDER_DOMAIN_EVENT_TYPES } from './domain/order-doman-events';
+import { OrderViewEntity } from './entities/order-view.entity';
+import { v4 as uuidv4 } from 'uuid';
+
 
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
   constructor(
-    @InjectRepository(Order)
-    private readonly orderRepository: Repository<Order>,
+
+
+    @InjectRepository(OrderViewEntity)
+    private readonly viewRepo: Repository<OrderViewEntity>,
 
     @Inject(PAYMENT_CLIENT)
     private readonly paymentClient: ClientProxy,
 
     @Inject(NOTIFICATION_CLIENT)
     private readonly notificationClient: ClientProxy,
+
+    private readonly orderEventStoreService: OrderEventStoreService,
+
+    private readonly orderProjectionService: OrderProjectionService,
+    
   ) {}
 
-  async createOrder(createOrderDto: CreateOrderDto): Promise<Order> {
-    const order = this.orderRepository.create({
-      ...createOrderDto,
-      status: 'PENDING',
-    });
+  async createOrder(createOrderDto: CreateOrderDto){
+    const orderId = uuidv4();  
 
-    const savedOrder = await this.orderRepository.save(order);
-    this.logger.log(`Order saved to DB: ${savedOrder.id}`);
-
-    // creating the order event
     const createOrderEvent = new OrderCreatedEvent(
-      savedOrder.id,
-      savedOrder.product,
-      savedOrder.quantity,
-      savedOrder.price,
-      savedOrder.userId,
+      orderId,
+      createOrderDto.product,
+      createOrderDto.quantity,
+      createOrderDto.price,
+      createOrderDto.userId,
     );
 
+    await this.orderEventStoreService.append(
+      orderId,
+      ORDER_DOMAIN_EVENT_TYPES.ORDER_CREATED,
+      createOrderEvent,
+    );
+
+    await this.orderProjectionService.applyEvent({
+      type: ORDER_DOMAIN_EVENT_TYPES.ORDER_CREATED,
+      payload: createOrderEvent,
+      aggregateId: orderId,
+    });
+
     this.paymentClient.emit(ROUTING_KEYS.ORDER_CREATED, createOrderEvent);
+
     this.notificationClient.emit(
       ROUTING_KEYS.ORDER_NOTIFICATION,
       createOrderEvent,
     );
 
-    this.logger.log(`Events published for order: ${savedOrder.id}`);
-    return savedOrder;
+    this.logger.log(`Events published for order: ${orderId}`);
+  return { id: orderId, ...createOrderDto, status: 'PENDING' };
   }
 
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
-    await this.orderRepository.update(orderId, { status });
-    this.logger.log(`Order ${orderId} status → ${status}`);
+
+
+  async findAll(): Promise<OrderViewEntity[]> {
+    return this.viewRepo.find();
   }
 
-  async findAll(): Promise<Order[]> {
-    return this.orderRepository.find({
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async findOne(id: string): Promise<Order> {
-    return this.orderRepository.findOne({ where: { id } });
+  async findOne(id: string): Promise<OrderViewEntity> {
+    return this.viewRepo.findOne({ where: { id } });
   }
 }

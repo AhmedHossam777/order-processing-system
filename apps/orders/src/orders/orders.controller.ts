@@ -8,12 +8,15 @@ import {
   PaymentRefundedEvent,
   ROUTING_KEYS,
 } from '@app/shared';
+import { OrderProjectionService } from './services/order-projection.service';
+import { OrderEventStoreService } from './services/order-event-store.service';
+import { ORDER_DOMAIN_EVENT_TYPES } from './domain/order-doman-events';
 
 @Controller('orders')
 export class OrdersController {
   private readonly logger = new Logger(OrdersController.name);
 
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(private readonly ordersService: OrdersService, private readonly orderProjectionService: OrderProjectionService, private readonly orderEventStoreService: OrderEventStoreService) {}
 
   @Post()
   async create(@Body() createOrderDto: CreateOrderDto) {
@@ -39,7 +42,16 @@ export class OrdersController {
     const originalMessage = context.getMessage();
     try {
       this.logger.log(`Received payment success for order: ${event.orderId}`);
-      await this.ordersService.updateOrderStatus(event.orderId, 'COMPLETED');
+      await this.orderEventStoreService.append(
+        event.orderId,
+        ORDER_DOMAIN_EVENT_TYPES.ORDER_COMPLETED,
+        event,
+      );
+      await this.orderProjectionService.applyEvent({
+        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_COMPLETED,
+        payload: event,
+        aggregateId: event.orderId,
+      });
       channel.ack(originalMessage);
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);
@@ -59,7 +71,16 @@ export class OrdersController {
       this.logger.warn(
         `Order ${event.orderId} FAILED (reason: ${event.reason})`,
       );
-      await this.ordersService.updateOrderStatus(event.orderId, 'FAILED');
+      await this.orderEventStoreService.append(
+        event.orderId,
+        ORDER_DOMAIN_EVENT_TYPES.ORDER_FAILED,
+        event,  
+      )
+      await this.orderProjectionService.applyEvent({
+        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_FAILED,
+        payload: event,
+        aggregateId: event.orderId,
+      });
       channel.ack(originalMessage);
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);
@@ -77,7 +98,16 @@ export class OrdersController {
       this.logger.warn(
         `Order ${event.orderId} CANCELLED (Refunded: ${event.amount})`,
       );
-      await this.ordersService.updateOrderStatus(event.orderId, 'CANCELLED');
+      await this.orderEventStoreService.append(
+        event.orderId,
+        ORDER_DOMAIN_EVENT_TYPES.ORDER_CANCELLED,
+        event,
+      );
+      await this.orderProjectionService.applyEvent({
+        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_CANCELLED,
+        payload: event,
+        aggregateId: event.orderId,
+      });
       channel.ack(context.getMessage());
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);
