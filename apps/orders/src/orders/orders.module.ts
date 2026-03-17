@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { OrdersController } from './orders.controller';
-import { OrdersService } from './orders.service';
+import { OrdersService } from './services/orders.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Order } from './entities/order.entity';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import {
   NOTIFICATION_CLIENT,
@@ -11,10 +10,13 @@ import {
   PAYMENT_QUEUE,
   RABBITMQ_URL,
 } from '@app/shared';
+import { OrderEventEntity } from './entities/order-event.entity';
+import { OrderViewEntity } from './entities/order-view.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order]),
+    TypeOrmModule.forFeature([OrderViewEntity, OrderEventEntity]),
+
 
     ClientsModule.register([
       {
