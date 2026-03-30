@@ -20,7 +20,6 @@ import { OrdersAdminController } from './order-admin.controller';
   imports: [
     TypeOrmModule.forFeature([OrderViewEntity, OrderEventEntity]),
 
-
     ClientsModule.register([
       {
         name: PAYMENT_CLIENT,

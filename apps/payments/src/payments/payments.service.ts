@@ -1,4 +1,9 @@
-import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -41,7 +46,9 @@ export class PaymentsService {
       where: { orderId: event.orderId },
     });
     if (existing) {
-      this.logger.log(`Payment for order ${event.orderId} already processed (${existing.status}), skipping`);
+      this.logger.log(
+        `Payment for order ${event.orderId} already processed (${existing.status}), skipping`,
+      );
       return;
     }
 
@@ -105,11 +112,9 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      this.logger.error(
-        `Could not find payment for order ${event.orderId}`,
-      );
+      this.logger.error(`Could not find payment for order ${event.orderId}`);
       throw new BadRequestException(
-        `Could not find successful payment for order ${event.orderId}`
+        `Could not find successful payment for order ${event.orderId}`,
       );
     }
 
@@ -120,7 +125,7 @@ export class PaymentsService {
 
     if (payment.status !== 'SUCCESS') {
       throw new BadRequestException(
-        `Order ${event.orderId} payment is ${payment.status}, cannot refund`
+        `Order ${event.orderId} payment is ${payment.status}, cannot refund`,
       );
     }
 
