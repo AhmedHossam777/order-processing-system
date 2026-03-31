@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Logger, Param, Post } from '@nestjs/common';
-import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import {
@@ -8,29 +7,46 @@ import {
   PaymentRefundedEvent,
   ROUTING_KEYS,
 } from '@app/shared';
-import { OrderProjectionService } from './services/order-projection.service';
-import { OrderEventStoreService } from './services/order-event-store.service';
-import { ORDER_DOMAIN_EVENT_TYPES } from './domain/order-doman-events';
+
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { CreateOrderCommand } from './commands/create-order.command';
+import { CompleteOrderCommand } from './commands/complete-order.command';
+import { FailOrderCommand } from './commands/fail-order.command';
+import { CancelOrderCommand } from './commands/cancel-order.command';
+import { GetAllOrdersQuery } from './queries/get-all-orders.query';
+import { GetOrderByIdQuery } from './queries/get-order-by-id.query';
 
 @Controller('orders')
 export class OrdersController {
   private readonly logger = new Logger(OrdersController.name);
 
-  constructor(private readonly ordersService: OrdersService, private readonly orderProjectionService: OrderProjectionService, private readonly orderEventStoreService: OrderEventStoreService) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Post()
   async create(@Body() createOrderDto: CreateOrderDto) {
-    return await this.ordersService.createOrder(createOrderDto);
+    return await this.commandBus.execute(
+      new CreateOrderCommand(
+        createOrderDto.product,
+        createOrderDto.quantity,
+        createOrderDto.price,
+        createOrderDto.userId,
+      ),
+    );
   }
 
   @Get()
   async findAll() {
-    return this.ordersService.findAll();
+    return this.commandBus.execute(
+      this.queryBus.execute(new GetAllOrdersQuery()),
+    );
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    return this.ordersService.findOne(id);
+    return this.queryBus.execute(new GetOrderByIdQuery(id));
   }
 
   @EventPattern(ROUTING_KEYS.INVENTORY_RESERVED)
@@ -42,16 +58,9 @@ export class OrdersController {
     const originalMessage = context.getMessage();
     try {
       this.logger.log(`Received payment success for order: ${event.orderId}`);
-      await this.orderEventStoreService.append(
-        event.orderId,
-        ORDER_DOMAIN_EVENT_TYPES.ORDER_COMPLETED,
-        event,
-      );
-      await this.orderProjectionService.applyEvent({
-        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_COMPLETED,
-        payload: event,
-        aggregateId: event.orderId,
-      });
+
+      await this.commandBus.execute(new CompleteOrderCommand(event.orderId));
+
       channel.ack(originalMessage);
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);
@@ -71,16 +80,9 @@ export class OrdersController {
       this.logger.warn(
         `Order ${event.orderId} FAILED (reason: ${event.reason})`,
       );
-      await this.orderEventStoreService.append(
-        event.orderId,
-        ORDER_DOMAIN_EVENT_TYPES.ORDER_FAILED,
-        event,  
-      )
-      await this.orderProjectionService.applyEvent({
-        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_FAILED,
-        payload: event,
-        aggregateId: event.orderId,
-      });
+      await this.commandBus.execute(
+        new FailOrderCommand(event.orderId, event.reason),
+      );
       channel.ack(originalMessage);
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);
@@ -98,16 +100,9 @@ export class OrdersController {
       this.logger.warn(
         `Order ${event.orderId} CANCELLED (Refunded: ${event.amount})`,
       );
-      await this.orderEventStoreService.append(
-        event.orderId,
-        ORDER_DOMAIN_EVENT_TYPES.ORDER_CANCELLED,
-        event,
+      await this.commandBus.execute(
+        new CancelOrderCommand(event.orderId, event.reason),
       );
-      await this.orderProjectionService.applyEvent({
-        type: ORDER_DOMAIN_EVENT_TYPES.ORDER_CANCELLED,
-        payload: event,
-        aggregateId: event.orderId,
-      });
       channel.ack(context.getMessage());
     } catch (error) {
       this.logger.error(`Failed to update order status`, error);

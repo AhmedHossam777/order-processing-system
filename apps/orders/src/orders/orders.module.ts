@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { OrdersController } from './orders.controller';
-import { OrdersService } from './orders.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import {
@@ -15,9 +14,31 @@ import { OrderViewEntity } from './entities/order-view.entity';
 import { OrderProjectionService } from './services/order-projection.service';
 import { OrderEventStoreService } from './services/order-event-store.service';
 import { OrdersAdminController } from './order-admin.controller';
+import {
+  CancelOrderHandler,
+  CompleteOrderHandler,
+  CreateOrderHandler,
+  FailOrderHandler,
+} from './commands/handlers';
+import { GetAllOrdersHandler, GetOrderByIdHandler } from './queries/handlers';
+import { CqrsModule } from '@nestjs/cqrs';
+
+const CommandHandlers = [
+  CreateOrderHandler,
+
+  CompleteOrderHandler,
+
+  FailOrderHandler,
+
+  CancelOrderHandler,
+];
+
+const QueryHandlers = [GetAllOrdersHandler, GetOrderByIdHandler];
 
 @Module({
   imports: [
+    CqrsModule,
+
     TypeOrmModule.forFeature([OrderViewEntity, OrderEventEntity]),
 
     ClientsModule.register([
@@ -42,6 +63,11 @@ import { OrdersAdminController } from './order-admin.controller';
     ]),
   ],
   controllers: [OrdersController, OrdersAdminController],
-  providers: [OrdersService, OrderEventStoreService, OrderProjectionService],
+  providers: [
+    OrderEventStoreService,
+    OrderProjectionService,
+    ...CommandHandlers,
+    ...QueryHandlers,
+  ],
 })
 export class OrdersModule {}
