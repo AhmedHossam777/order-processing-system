@@ -1,12 +1,12 @@
-# 🛒 Order Processing System
+# Order Processing System
 
 A distributed **microservices-based order processing system** built with NestJS, implementing **Event Sourcing**, **CQRS**, and **Saga-based orchestration** via RabbitMQ.
 
 ## Architecture Overview
 
 ```
-┌──────────────┐     RabbitMQ      ┌──────────────────┐
-│              │  order.created    │                  │
+┌──────────────┐     RabbitMQ     ┌──────────────────┐
+│              │  order.created   │                  │
 │   Orders     │ ───────────────► │    Payments      │
 │   Service    │                  │    Service       │
 │  (port 3000) │ ◄─────────────── │   (port 3001)    │
@@ -35,21 +35,37 @@ A distributed **microservices-based order processing system** built with NestJS,
 
 ### CQRS (Command Query Responsibility Segregation)
 
-The Orders service separates **writes** from **reads**:
+The Orders service separates **writes** from **reads** using the `@nestjs/cqrs` module:
 
 | Side | Storage | Purpose |
 |------|---------|---------|
-| **Write** | `orders_events` (append-only event store) | Source of truth — records every state change |
-| **Read** | `orders_view` (projected read model) | Flattened, query-optimized view of current state |
+| **Write (Commands)** | `orders_events` (append-only event store) | Source of truth — records every state change |
+| **Read (Queries)** | `orders_view` (projected read model) | Flattened, query-optimized view of current state |
+
+**Commands** (write side):
+
+| Command | Description |
+|---------|-------------|
+| `CreateOrderCommand` | Creates a new order, appends `ORDER_CREATED` event, publishes to payment and notification queues |
+| `CompleteOrderCommand` | Marks order as completed when inventory is successfully reserved |
+| `FailOrderCommand` | Marks order as failed when payment is declined |
+| `CancelOrderCommand` | Marks order as cancelled when inventory fails (triggers payment refund) |
+
+**Queries** (read side):
+
+| Query | Description |
+|-------|-------------|
+| `GetAllOrdersQuery` | Lists all orders from the projected read model |
+| `GetOrderByIdQuery` | Fetches a single order by ID from the read model |
 
 ### Event Sourcing
 
 Instead of storing just the current state, every state change is captured as an **immutable event**:
 
-- `ORDER_CREATED` → new order placed
-- `ORDER_COMPLETED` → inventory reserved successfully
-- `ORDER_FAILED` → payment failed
-- `ORDER_CANCELLED` → payment refunded
+- `ORDER_CREATED` — new order placed
+- `ORDER_COMPLETED` — inventory reserved successfully
+- `ORDER_FAILED` — payment failed
+- `ORDER_CANCELLED` — payment refunded after inventory failure
 
 The read model can be **rebuilt at any time** by replaying all events via `POST /admin/orders/replay`.
 
@@ -65,12 +81,19 @@ Order processing follows an event-driven saga across services:
    Inventory Failed → Payment refunded → Order marked CANCELLED
 ```
 
+Compensating transactions ensure consistency: if inventory reservation fails, the payment is automatically refunded.
+
+### Idempotency
+
+Both the Payment and Inventory services implement idempotent message handling. Before processing an event, each service checks whether a record for that `orderId` already exists. This prevents duplicate charges or reservations when RabbitMQ delivers the same message more than once (at-least-once delivery).
+
 ## Tech Stack
 
 - **Framework**: [NestJS](https://nestjs.com/) (monorepo)
 - **Language**: TypeScript
-- **Message Broker**: RabbitMQ
-- **Database**: PostgreSQL (one per service)
+- **CQRS**: @nestjs/cqrs
+- **Message Broker**: RabbitMQ (AMQP 0.9.1)
+- **Database**: PostgreSQL 16 (one instance per service)
 - **ORM**: TypeORM
 - **Architecture**: Microservices, CQRS, Event Sourcing, Saga
 
@@ -79,31 +102,67 @@ Order processing follows an event-driven saga across services:
 ```
 order-processing-system/
 ├── apps/
-│   ├── orders/          # Order management + CQRS/Event Sourcing
-│   ├── payments/        # Payment processing
-│   ├── inventory/       # Stock management
-│   └── notifications/   # Email/notification handling
+│   ├── orders/            # Order management + CQRS / Event Sourcing
+│   ├── payments/          # Payment processing (80% success simulation)
+│   ├── inventory/         # Stock reservation (70% availability simulation)
+│   └── notifications/     # Notification handling (simulated email)
 ├── libs/
-│   └── shared/          # Shared events, constants, DTOs
-└── docker-compose.yaml  # RabbitMQ + 4 PostgreSQL databases
+│   └── shared/            # Shared events, constants, DTOs, injection tokens
+├── docker-compose.yaml    # RabbitMQ + 4 PostgreSQL databases
+├── nest-cli.json          # NestJS monorepo configuration
+└── package.json
 ```
 
-### Orders Service (CQRS Architecture)
+### Orders Service — CQRS Architecture
 
 ```
-orders/
+apps/orders/src/orders/
+├── commands/
+│   ├── impl/                              # Command classes
+│   │   ├── create-order.command.ts
+│   │   ├── complete-order.command.ts
+│   │   ├── fail-order.command.ts
+│   │   └── cancel-order.command.ts
+│   └── handlers/                          # Command handlers
+│       ├── create-order.handler.ts
+│       ├── complete-order.handler.ts
+│       ├── fail-order.handler.ts
+│       └── cancel-order.handler.ts
+├── queries/
+│   ├── impl/                              # Query classes
+│   │   ├── get-all-orders.query.ts
+│   │   └── get-order-by-id.query.ts
+│   └── handlers/                          # Query handlers
+│       ├── get-all-orders.handler.ts
+│       └── get-order-by-id.handler.ts
 ├── domain/
-│   └── order-doman-events.ts          # Domain event types & payload interfaces
+│   └── order-doman-events.ts              # Domain event types & payload interfaces
 ├── entities/
-│   ├── order-event.entity.ts          # Event store table (append-only)
-│   └── order-view.entity.ts           # Read model table (projected)
+│   ├── order-event.entity.ts              # Event store table (append-only)
+│   └── order-view.entity.ts               # Read model table (projected)
 ├── services/
-│   ├── order-event-store.service.ts   # Append & load events
-│   └── order-projection.service.ts    # Apply events → update read model
-├── orders.controller.ts               # HTTP + RabbitMQ event handlers
-├── orders.service.ts                  # Business logic (create order)
-└── order-admin.controller.ts          # Admin: replay/rebuild projection
+│   ├── order-event-store.service.ts       # Append & load events
+│   └── order-projection.service.ts        # Apply events → update read model
+├── orders.controller.ts                   # HTTP endpoints + RabbitMQ event handlers
+├── orders.service.ts                      # Legacy service (pre-CQRS)
+└── order-admin.controller.ts              # Admin: replay/rebuild projection
 ```
+
+### Service Databases
+
+| Service | Port | Database | User |
+|---------|------|----------|------|
+| Orders | 5433 | `orders_db` | `orders_user` |
+| Payments | 5434 | `payments_db` | `payments_user` |
+| Notifications | 5435 | `notifications_db` | `notifications_user` |
+| Inventory | 5436 | `inventory_db` | `inventory_user` |
+
+### Shared Library
+
+Located at `libs/shared/src`, provides:
+
+- **Events**: 8 event classes (`OrderCreatedEvent`, `PaymentSuccessEvent`, `PaymentFailedEvent`, `PaymentRefundedEvent`, `InventoryReservedEvent`, `InventoryFailedEvent`, `OrderCompletedEvent`, `OrderCancelledEvent`)
+- **Constants**: RabbitMQ URL, queue names, routing keys, client injection tokens
 
 ## Getting Started
 
@@ -120,10 +179,7 @@ docker-compose up -d
 
 This starts:
 - **RabbitMQ** on `localhost:5672` (management UI: `localhost:15672`, user: `admin`, pass: `password`)
-- **Orders DB** on `localhost:5433`
-- **Payments DB** on `localhost:5434`
-- **Notifications DB** on `localhost:5435`
-- **Inventory DB** on `localhost:5436`
+- **4 PostgreSQL** instances (ports 5433–5436)
 
 ### 2. Install Dependencies
 
@@ -183,31 +239,39 @@ curl -X POST http://localhost:3000/orders \
 ```
 POST /orders
   │
-  ├─ 1. Append ORDER_CREATED to event store
-  ├─ 2. Project to read model (status: PENDING)
-  ├─ 3. Publish to payment queue
-  └─ 4. Publish to notification queue
+  ├─ 1. CreateOrderCommand dispatched
+  ├─ 2. Handler appends ORDER_CREATED to event store
+  ├─ 3. Projects to read model (status: PENDING)
+  ├─ 4. Publishes to payment queue
+  └─ 5. Publishes to notification queue
          │
          ▼
-   Payment Service
+   Payment Service (idempotent)
          │
     ┌────┴────┐
     │         │
  success    failed
     │         │
     ▼         ▼
- Inventory  ORDER_FAILED
- Service    (event stored + projected)
-    │
+ Inventory  FailOrderCommand
+ Service    → ORDER_FAILED
+    │         (event stored + projected)
  ┌──┴──┐
  │     │
  ok   failed
  │     │
  ▼     ▼
-ORDER  Payment refund
-COMPLETED  → ORDER_CANCELLED
+Complete  Payment refund
+Order     → CancelOrderCommand
+          → ORDER_CANCELLED
 ```
 
-## License
+## Testing
 
-MIT
+```bash
+npm run test           # Run unit tests
+npm run test:watch     # Watch mode
+npm run test:cov       # Coverage report
+npm run test:e2e       # End-to-end tests
+```
+
